@@ -14,13 +14,13 @@ const storage = PostgresStorage();
 
 app.use(helmet());
 
-const allowedOrigins = [
-    "http://192.168.100.59:3000",
-    "https://monark-survey.mytalents-academy.com"
-];
+//const allowedOrigins = [
+//    "http://192.168.100.59:3000",
+  //  "https://monark-survey.mytalents-academy.com"
+//];
 
 app.use(cors({
-    origin: allowedOrigins,
+    origin: true,
     credentials: true
 }));
 
