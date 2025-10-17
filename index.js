@@ -14,16 +14,14 @@ const storage = PostgresStorage();
 
 app.use(helmet());
 
-const allowedOrigins = ["https://monark-survey.mytalents-academy.com", "http://192.168.100.59:3000"];
+const allowedOrigins = [
+    "http://localhost:3000",
+    "https://monark-survey.mytalents-academy.com"
+];
+
 app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error("Not allowed by CORS"));
-        }
-    }, credentials: true,
+    origin: allowedOrigins,
+    credentials: true
 }));
 
 app.use(session({
@@ -187,7 +185,7 @@ app.get(apiBaseAddress + "/changeName", (req, res) => {
 
 app.post(`${apiBaseAddress}/create`, async (req, res) => {
     try {
-        const { title, json, surveytheme } = req.body;
+        const {title, json, surveytheme} = req.body;
         const name = title?.trim() || "Untitled";
         let createdby = "Anonymous";
 
@@ -218,13 +216,13 @@ app.post(`${apiBaseAddress}/create`, async (req, res) => {
         });
     } catch (error) {
         console.error("Create survey error:", error);
-        res.status(500).json({ message: "Erreur interne du serveur" });
+        res.status(500).json({message: "Erreur interne du serveur"});
     }
 });
 
 app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
     try {
-        const { id, json, surveytheme } = req.body;
+        const {id, json, surveytheme} = req.body;
         const name = json?.title?.trim() || "Untitled";
         let createdby = "Anonymous";
 
@@ -240,7 +238,7 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
 
         storage.storeSurvey(id, name, json, createdby, surveytheme, updatedSurvey => {
             if (!updatedSurvey) {
-                return res.status(500).json({ message: "Erreur lors de la mise à jour du sondage" });
+                return res.status(500).json({message: "Erreur lors de la mise à jour du sondage"});
             }
 
             res.status(200).json({
@@ -250,7 +248,7 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
         });
     } catch (error) {
         console.error("Change JSON error:", error);
-        res.status(500).json({ message: "Erreur interne du serveur" });
+        res.status(500).json({message: "Erreur interne du serveur"});
     }
 });
 
@@ -277,6 +275,6 @@ app.get("/api/results/:postId", (req, res) => {
 
 const PORT = process.env.PORT || 1000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
 
