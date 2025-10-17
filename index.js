@@ -14,7 +14,7 @@ const storage = PostgresStorage();
 
 app.use(helmet());
 
-const allowedOrigins = ["https://monark-survey.mytalents-academy.com", "http://localhost:3000"];
+const allowedOrigins = ["https://monark-survey.mytalents-academy.com", "http://192.168.100.59:3000"];
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin) return callback(null, true);
@@ -33,8 +33,8 @@ app.use(session({
     cookie: {
         httpOnly: true,
         maxAge: 1000 * 60 * 60 * 24 * 7,
-        sameSite: "none",
-        secure: true
+        sameSite: "strict",
+        secure: false
     }
 }));
 
