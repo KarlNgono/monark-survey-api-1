@@ -6,33 +6,36 @@ const cors = require("cors");
 const helmet = require("helmet");
 const bcrypt = require("bcrypt");
 const PostgresStorage = require("./db-adapters/postgres");
+const pgSession = require("connect-pg-simple")(session);
 
 const apiBaseAddress = "/api";
 
 const app = express();
 const storage = PostgresStorage();
+const sessionStore = new pgSession({
+    pool: storage.pool,
+    tableName: "user_sessions",
+    createTableIfMissing: true
+});
 
 app.use(helmet());
 
-//const allowedOrigins = [
-//    "http://192.168.100.59:3000",
-  //  "https://monark-survey.mytalents-academy.com"
-//];
-
 app.use(cors({
-    origin: true,
-    credentials: true
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
 }));
 
 app.use(session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
+    rolling: true,
     cookie: {
         httpOnly: true,
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-        sameSite: "none",
-        secure: true
+        maxAge: 1000 * 60 ,
+        sameSite: "lax",
+        secure: false
     }
 }));
 
@@ -186,33 +189,21 @@ app.get(apiBaseAddress + "/changeName", (req, res) => {
 app.post(`${apiBaseAddress}/create`, async (req, res) => {
     try {
         const {title, json, surveytheme} = req.body;
-        const name = title?.trim() || "Untitled";
-        let createdby = "Anonymous";
+        const name = title?.trim() || json?.title?.trim() || "Untitled";
 
+        let createdby = "Anonymous";
         if (req.session?.userId) {
-            const result = await storage.dbQuery(
-                "SELECT name FROM users WHERE id = $1",
-                [req.session.userId]
-            );
-            if (result.rows.length > 0) {
-                createdby = result.rows[0].name;
-            }
+            const result = await storage.dbQuery("SELECT name FROM users WHERE id = $1", [req.session.userId]);
+            if (result.rows.length > 0) createdby = result.rows[0].name;
         }
 
         storage.addSurvey(name, createdby, survey => {
-            storage.storeSurvey(
-                survey.id,
-                name,
-                json,
-                createdby,
-                surveytheme,
-                storedSurvey => {
-                    res.status(201).json({
-                        message: "Survey created successfully",
-                        survey: storedSurvey
-                    });
-                }
-            );
+            storage.storeSurvey(survey.id, name, json, createdby, surveytheme, storedSurvey => {
+                res.status(201).json({
+                    message: "Survey created successfully",
+                    survey: storedSurvey
+                });
+            });
         });
     } catch (error) {
         console.error("Create survey error:", error);
@@ -224,23 +215,15 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
     try {
         const {id, json, surveytheme} = req.body;
         const name = json?.title?.trim() || "Untitled";
-        let createdby = "Anonymous";
 
+        let createdby = "Anonymous";
         if (req.session?.userId) {
-            const result = await storage.dbQuery(
-                "SELECT name FROM users WHERE id = $1",
-                [req.session.userId]
-            );
-            if (result.rows.length > 0) {
-                createdby = result.rows[0].name;
-            }
+            const result = await storage.dbQuery("SELECT name FROM users WHERE id = $1", [req.session.userId]);
+            if (result.rows.length > 0) createdby = result.rows[0].name;
         }
 
         storage.storeSurvey(id, name, json, createdby, surveytheme, updatedSurvey => {
-            if (!updatedSurvey) {
-                return res.status(500).json({message: "Erreur lors de la mise à jour du sondage"});
-            }
-
+            if (!updatedSurvey) return res.status(500).json({message: "Erreur lors de la mise à jour du sondage"});
             res.status(200).json({
                 message: "Survey updated successfully",
                 survey: updatedSurvey

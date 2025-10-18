@@ -31,7 +31,9 @@ function PostgresStorage() {
   const surveyStorage = new SurveyStorage(dbQueryAdapter);
 
   surveyStorage.dbQuery = dbQuery;
-
+  
+  surveyStorage.pool = pool;
+ 
   return surveyStorage;
 }
 
