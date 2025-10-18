@@ -188,8 +188,19 @@ app.get(apiBaseAddress + "/changeName", (req, res) => {
 
 app.post(`${apiBaseAddress}/create`, async (req, res) => {
     try {
-        const {title, json, surveytheme} = req.body;
-        const name = title?.trim() || json?.title?.trim() || "Untitled";
+        const { title, json, surveytheme } = req.body;
+
+        let name = "Untitled";
+        if (typeof title === "string" && title.trim()) {
+            name = title.trim();
+        } else if (json?.title) {
+            if (typeof json.title === "string" && json.title.trim()) {
+                name = json.title.trim();
+            } else if (typeof json.title === "object") {
+                const locale = json.locale || Object.keys(json.title)[0];
+                name = json.title[locale] || json.title.fr || "Untitled";
+            }
+        }
 
         let createdby = "Anonymous";
         if (req.session?.userId) {
@@ -207,14 +218,21 @@ app.post(`${apiBaseAddress}/create`, async (req, res) => {
         });
     } catch (error) {
         console.error("Create survey error:", error);
-        res.status(500).json({message: "Erreur interne du serveur"});
+        res.status(500).json({ message: "Erreur interne du serveur" });
     }
 });
 
 app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
     try {
-        const {id, json, surveytheme} = req.body;
-        const name = json?.title?.trim() || "Untitled";
+        const { id, json, surveytheme } = req.body;
+
+        let name = "Untitled";
+        if (typeof json?.title === "string" && json.title.trim()) {
+            name = json.title.trim();
+        } else if (typeof json?.title === "object") {
+            const locale = json.locale || Object.keys(json.title)[0];
+            name = json.title[locale] || json.title.fr || "Untitled";
+        }
 
         let createdby = "Anonymous";
         if (req.session?.userId) {
@@ -223,7 +241,7 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
         }
 
         storage.storeSurvey(id, name, json, createdby, surveytheme, updatedSurvey => {
-            if (!updatedSurvey) return res.status(500).json({message: "Erreur lors de la mise à jour du sondage"});
+            if (!updatedSurvey) return res.status(500).json({ message: "Erreur lors de la mise à jour du sondage" });
             res.status(200).json({
                 message: "Survey updated successfully",
                 survey: updatedSurvey
@@ -231,7 +249,7 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
         });
     } catch (error) {
         console.error("Change JSON error:", error);
-        res.status(500).json({message: "Erreur interne du serveur"});
+        res.status(500).json({ message: "Erreur interne du serveur" });
     }
 });
 
