@@ -60,4 +60,4 @@ function SqlCrudAdapter(queryExecutorFunction) {
   };
 }
 
-module.exports = SqlCrudAdapter;
+export default SqlCrudAdapter;

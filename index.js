@@ -1,12 +1,18 @@
-require("dotenv").config();
-const express = require("express");
-const bodyParser = require("body-parser");
-const session = require("express-session");
-const cors = require("cors");
-const helmet = require("helmet");
-const bcrypt = require("bcrypt");
-const PostgresStorage = require("./db-adapters/postgres");
-const pgSession = require("connect-pg-simple")(session);
+import dotenv from "dotenv";
+
+dotenv.config();
+
+import express from "express";
+import bodyParser from "body-parser";
+import session from "express-session";
+import cors from "cors";
+import helmet from "helmet";
+import bcrypt from "bcrypt";
+import PostgresStorage from "./db-adapters/postgres.js";
+import connectPgSimple from "connect-pg-simple";
+
+const pgSession = connectPgSimple(session);
+
 
 const apiBaseAddress = "/api";
 
@@ -17,11 +23,21 @@ const sessionStore = new pgSession({
     tableName: "user_sessions",
     createTableIfMissing: true
 });
+import models, {sequelize} from "./models/index.js";
+import contactRoutes from "./routes/contact.routes.js";
+import organizationRoutes from "./routes/organization.routes.js";
+import departmentRoutes from "./routes/department.routes.js";
+import positionRoutes from "./routes/position.routes.js";
+import languageRoutes from "./routes/language.routes.js";
+import {setupSwagger} from "./swagger.js";
+import segmentRoutes from "./routes/segment.routes.js";
+import messageTemplateRoutes from "./routes/messageTemplate.routes.js";
+import messageRoutes from "./routes/message.routes.js";
 
 app.use(helmet());
 
 app.use(cors({
-    origin: process.env.FRONTEND_URL,
+    origin: [process.env.FRONTEND_URL, "http://localhost:3000"],
     credentials: true,
 }));
 
@@ -33,7 +49,7 @@ app.use(session({
     rolling: true,
     cookie: {
         httpOnly: true,
-        maxAge: 1000 * 60 ,
+        maxAge: 1000 * 60 * 60 * 24,
         sameSite: "lax",
         secure: false
     }
@@ -43,6 +59,9 @@ app.use(express.json({limit: "50mb"}));
 app.use(express.urlencoded({limit: "50mb", extended: true}));
 app.use(bodyParser.json({limit: "50mb"}));
 app.use(bodyParser.urlencoded({limit: "50mb", extended: true}));
+
+setupSwagger(app);
+
 
 app.get(apiBaseAddress + "/getUsers", async (req, res) => {
     try {
@@ -173,7 +192,23 @@ app.get(apiBaseAddress + "/me", async (req, res) => {
     }
 });
 
-app.get(apiBaseAddress + "/getActive", (req, res) => storage.getSurveys(result => res.json(result)));
+app.get(apiBaseAddress + "/getActive", async (req, res) => {
+    try {
+        if (!req.session.userId) {
+            return res.status(401).json({ message: "Utilisateur non authentifié" });
+        }
+
+        const result = await storage.dbQuery(
+            "SELECT * FROM surveys WHERE createdby_id = $1 ORDER BY id DESC",
+            [req.session.userId]
+        );
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erreur lors de la récupération des sondages :", err);
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+});
 
 app.get(apiBaseAddress + "/getSurvey", (req, res) => {
     const surveyId = req.query["surveyId"];
@@ -189,7 +224,6 @@ app.get(apiBaseAddress + "/changeName", (req, res) => {
 app.post(`${apiBaseAddress}/create`, async (req, res) => {
     try {
         const { title, json, surveytheme } = req.body;
-
         let name = "Untitled";
         if (typeof title === "string" && title.trim()) {
             name = title.trim();
@@ -201,21 +235,34 @@ app.post(`${apiBaseAddress}/create`, async (req, res) => {
                 name = json.title[locale] || json.title.fr || "Untitled";
             }
         }
-
-        let createdby = "Anonymous";
-        if (req.session?.userId) {
-            const result = await storage.dbQuery("SELECT name FROM users WHERE id = $1", [req.session.userId]);
-            if (result.rows.length > 0) createdby = result.rows[0].name;
+        if (!req.session?.userId) {
+            return res.status(401).json({ message: "Utilisateur non authentifié" });
         }
 
-        storage.addSurvey(name, createdby, survey => {
-            storage.storeSurvey(survey.id, name, json, createdby, surveytheme, storedSurvey => {
-                res.status(201).json({
-                    message: "Survey created successfully",
-                    survey: storedSurvey
-                });
-            });
+        const userResult = await storage.dbQuery(
+            "SELECT name FROM users WHERE id = $1",
+            [req.session.userId]
+        );
+
+        const createdby = userResult.rows.length > 0 ? userResult.rows[0].name : "Maurice";
+        const createdby_id = req.session.userId;
+        storage.addSurvey(name, createdby, createdby_id, survey => {
+            storage.storeSurvey(
+                survey.id,
+                name,
+                json,
+                createdby,
+                createdby_id,
+                surveytheme,
+                storedSurvey => {
+                    res.status(201).json({
+                        message: "Survey created successfully",
+                        survey: storedSurvey
+                    });
+                }
+            );
         });
+
     } catch (error) {
         console.error("Create survey error:", error);
         res.status(500).json({ message: "Erreur interne du serveur" });
@@ -224,7 +271,7 @@ app.post(`${apiBaseAddress}/create`, async (req, res) => {
 
 app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
     try {
-        const { id, json, surveytheme } = req.body;
+        const {id, json, surveytheme} = req.body;
 
         let name = "Untitled";
         if (typeof json?.title === "string" && json.title.trim()) {
@@ -234,14 +281,14 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
             name = json.title[locale] || json.title.fr || "Untitled";
         }
 
-        let createdby = "Anonymous";
+        let createdby = "Maurice";
         if (req.session?.userId) {
             const result = await storage.dbQuery("SELECT name FROM users WHERE id = $1", [req.session.userId]);
             if (result.rows.length > 0) createdby = result.rows[0].name;
         }
 
         storage.storeSurvey(id, name, json, createdby, surveytheme, updatedSurvey => {
-            if (!updatedSurvey) return res.status(500).json({ message: "Erreur lors de la mise à jour du sondage" });
+            if (!updatedSurvey) return res.status(500).json({message: "Erreur lors de la mise à jour du sondage"});
             res.status(200).json({
                 message: "Survey updated successfully",
                 survey: updatedSurvey
@@ -249,10 +296,29 @@ app.post(`${apiBaseAddress}/changeJson`, async (req, res) => {
         });
     } catch (error) {
         console.error("Change JSON error:", error);
-        res.status(500).json({ message: "Erreur interne du serveur" });
+        res.status(500).json({message: "Erreur interne du serveur"});
     }
 });
 
+app.put(`${apiBaseAddress}/surveys/:id/setTemplate`, async (req, res) => {
+    const surveyId = req.params.id;
+    try {
+        const result = await storage.dbQuery(
+            "UPDATE surveys SET istemplate = true WHERE id = $1 RETURNING id, name, istemplate",
+            [surveyId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({message: "Survey not found"});
+        }
+        res.json({
+            message: "Survey set as template successfully",
+            survey: result.rows[0]
+        });
+    } catch (err) {
+        console.error("Set istemplate error:", err);
+        res.status(500).json({message: "Server error"});
+    }
+});
 
 app.post(apiBaseAddress + "/post", (req, res) => {
     const {postId, surveyResult} = req.body;
@@ -273,6 +339,20 @@ app.get("/api/results/:postId", (req, res) => {
     const postId = req.params.postId;
     storage.getResults(postId, result => res.json(result));
 });
+
+
+app.use("/api/contacts", contactRoutes);
+app.use("/api/organizations", organizationRoutes);
+app.use("/api/departments", departmentRoutes);
+app.use("/api/positions", positionRoutes);
+app.use("/api/languages", languageRoutes);
+app.use("/api/segments", segmentRoutes);
+app.use("/api/templates", messageTemplateRoutes);
+app.use("/api", messageRoutes);
+
+sequelize.sync({alter: true})
+    .then(() => console.log("Sequelize DB synchronized"))
+    .catch(err => console.error(" Sequelize sync error:", err));
 
 const PORT = process.env.PORT || 1000;
 app.listen(PORT, () => {

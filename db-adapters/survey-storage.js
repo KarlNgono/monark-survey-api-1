@@ -1,12 +1,13 @@
 let currentId = 1;
 
 function SurveyStorage(dbQueryAdapter) {
-  function addSurvey(name, createdby, callback) {
+  function addSurvey(name, createdby, createdby_id, callback) {
     const newObj = {
       name: name && name.trim() !== "" ? name : "New Survey " + currentId++,
       json: "{}",
       surveytheme: "{}",
       createdby,
+      createdby_id,
       responsescount: 0
     };
 
@@ -16,20 +17,33 @@ function SurveyStorage(dbQueryAdapter) {
     });
   }
 
-  function storeSurvey(id, name, json, createdby, surveytheme, callback) {
-    const jsonStr = typeof json === "string" ? json : JSON.stringify(json);
+  function storeSurvey(id, name, json, createdby, createdby_id, surveytheme, callback) {
+    const jsonObj = typeof json === "string" ? JSON.parse(json) : json;
+    const jsonStr = JSON.stringify(jsonObj);
     const themeStr = typeof surveytheme === "string" ? surveytheme : JSON.stringify(surveytheme);
-    const createdByStr = typeof createdby === "string" ? createdby : "Anonymous";
     const cb = typeof callback === "function" ? callback : () => {};
+
+    const status = jsonObj.status || "draft";
+    const type = jsonObj.surveyType || "public";
 
     dbQueryAdapter.retrieve("surveys", [{ name: "id", op: "=", value: id }], results => {
       const current = results[0];
       const responsescount = current ? current.responsescount : 0;
 
       dbQueryAdapter.update(
-        "surveys",
-        { id, name, json: jsonStr, surveytheme: themeStr, createdby: createdByStr, responsescount },
-        results => cb(results)
+          "surveys",
+          {
+            id,
+            name,
+            json: jsonStr,
+            surveytheme: themeStr,
+            createdby,
+            createdby_id,
+            responsescount,
+            status,
+            type
+          },
+          results => cb(results)
       );
     });
   }
@@ -98,4 +112,4 @@ function SurveyStorage(dbQueryAdapter) {
   };
 }
 
-module.exports = SurveyStorage;
+export default SurveyStorage;

@@ -1,8 +1,9 @@
-require("dotenv").config();
-const fs = require("fs");
-const SqlCrudAdapter = require("./sql-crud-adapter");
-const SurveyStorage = require("./survey-storage");
-const { Pool } = require("pg");
+import "dotenv/config";
+import fs from "fs";
+import SqlCrudAdapter from "./sql-crud-adapter.js";
+import SurveyStorage from "./survey-storage.js";
+import pkg from "pg";
+const { Pool } = pkg;
 
 const dbConfig = {
   host: process.env.DATABASE_HOST,
@@ -10,9 +11,7 @@ const dbConfig = {
   database: process.env.DATABASE_NAME,
   user: process.env.DATABASE_USER,
   password: process.env.DATABASE_PASSWORD,
-  ssl: process.env.DATABASE_SSL === "true"
-      ? { rejectUnauthorized: false }
-      : false
+  ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : false
 };
 
 const pool = new Pool(dbConfig);
@@ -31,10 +30,9 @@ function PostgresStorage() {
   const surveyStorage = new SurveyStorage(dbQueryAdapter);
 
   surveyStorage.dbQuery = dbQuery;
-  
   surveyStorage.pool = pool;
- 
+
   return surveyStorage;
 }
 
-module.exports = PostgresStorage;
+export default PostgresStorage;
