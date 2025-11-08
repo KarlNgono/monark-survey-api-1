@@ -11,6 +11,7 @@ import bcrypt from "bcrypt";
 import PostgresStorage from "./db-adapters/postgres.js";
 import connectPgSimple from "connect-pg-simple";
 
+
 const pgSession = connectPgSimple(session);
 
 
@@ -51,7 +52,7 @@ app.use(session({
         httpOnly: true,
         maxAge: 1000 * 60 * 60 * 24,
         sameSite: "lax",
-        secure: true
+        secure: false
     }
 }));
 
@@ -177,13 +178,31 @@ app.post(apiBaseAddress + "/logout", (req, res) => {
     });
 });
 
+import jwt from "jsonwebtoken";
+
 app.get(apiBaseAddress + "/me", async (req, res) => {
     try {
-        if (!req.session.userId) return res.status(401).json({message: "Not authenticated"});
+        let userId = null;
+        if (req.session?.userId) {
+            userId = req.session.userId;
+        } else if (req.headers.authorization) {
+            const token = req.headers.authorization.split(" ")[1];
+            try {
+                const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET);
+                userId = decoded.id || decoded.user?.id;
+            } catch (e) {
+                console.error("JWT verification failed:", e.message);
+                return res.status(401).json({message: "Invalid or expired token"});
+            }
+        }
+        if (!userId) return res.status(401).json({message: "Not authenticated"});
+        const result = await storage.dbQuery(
+            "SELECT id, name, email FROM users WHERE id=$1",
+            [userId]
+        );
 
-        const result = await storage.dbQuery("SELECT id, name, email FROM users WHERE id=$1", [req.session.userId]);
         const user = result.rows[0];
-        if (!user) return res.status(401).json({message: "Not authenticated"});
+        if (!user) return res.status(404).json({message: "User not found"});
 
         res.json(user);
     } catch (err) {
@@ -194,13 +213,26 @@ app.get(apiBaseAddress + "/me", async (req, res) => {
 
 app.get(apiBaseAddress + "/getActive", async (req, res) => {
     try {
-        if (!req.session.userId) {
+        let userId = null;
+        if (req.session?.userId) {
+            userId = req.session.userId;
+        }
+        else if (req.headers.authorization) {
+            const token = req.headers.authorization.split(" ")[1];
+            try {
+                const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET);
+                userId = decoded.id || decoded.user?.id;
+            } catch (e) {
+                console.error("JWT verification failed:", e.message);
+                return res.status(401).json({ message: "Jeton invalide ou expiré" });
+            }
+        }
+        if (!userId) {
             return res.status(401).json({ message: "Utilisateur non authentifié" });
         }
-
         const result = await storage.dbQuery(
             "SELECT * FROM surveys WHERE createdby_id = $1 ORDER BY id DESC",
-            [req.session.userId]
+            [userId]
         );
 
         res.json(result.rows);
@@ -223,7 +255,7 @@ app.get(apiBaseAddress + "/changeName", (req, res) => {
 
 app.post(`${apiBaseAddress}/create`, async (req, res) => {
     try {
-        const { title, json, surveytheme } = req.body;
+        const {title, json, surveytheme} = req.body;
         let name = "Untitled";
         if (typeof title === "string" && title.trim()) {
             name = title.trim();
@@ -236,7 +268,7 @@ app.post(`${apiBaseAddress}/create`, async (req, res) => {
             }
         }
         if (!req.session?.userId) {
-            return res.status(401).json({ message: "Utilisateur non authentifié" });
+            return res.status(401).json({message: "Utilisateur non authentifié"});
         }
 
         const userResult = await storage.dbQuery(
@@ -265,7 +297,7 @@ app.post(`${apiBaseAddress}/create`, async (req, res) => {
 
     } catch (error) {
         console.error("Create survey error:", error);
-        res.status(500).json({ message: "Erreur interne du serveur" });
+        res.status(500).json({message: "Erreur interne du serveur"});
     }
 });
 
